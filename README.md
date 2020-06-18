@@ -18,11 +18,12 @@ Logan is a log platform with ability to collect、store、upload and analyze fro
 
 **Search Logs**
 
-![Logan](https://mss-shon.sankuai.com/v1/mss_7d6cd84b52d543248bbb734abd392e9a/logan-open-source/logan_list_filter.gif)
+![Logan](./img/logan_list_filter.gif)
+
 
 **Log Detail**
 
-![Logan](https://mss-shon.sankuai.com/v1/mss_7d6cd84b52d543248bbb734abd392e9a/logan-open-source/logan_detail.gif)
+![Logan](./img/logan_detail.gif)
 
 [How to use demo](https://github.com/Meituan-Dianping/Logan/wiki/How-to-use-demo)
 
@@ -220,6 +221,12 @@ Finally, we hope to provide a more complete integrated case analysis ecosystem.
 
 See also the list of [contributors](https://github.com/Meituan-Dianping/Logan/graphs/contributors) who participated in this project.
 
+# Contact
+
+WeChat ID: 
+
+MTDPtech, MTDPtech01, MTDPtech03
+
 # License
 
 Logan is licensed under the MIT License - see the [LICENSE](https://github.com/Meituan-Dianping/Logan/blob/master/LICENSE) file for details.
@@ -228,6 +235,8 @@ Logan is licensed under the MIT License - see the [LICENSE](https://github.com/M
 [A lightweight case logging system based on mobile platform developed by Meituan-Dianping — Logan](https://tech.meituan.com/Logan.html)
 
 [Logan: Open Source](https://tech.meituan.com/logan_open_source.html)
+
+[Introduction to Logan Web SDK](https://tech.meituan.com/2020/01/09/meituan-logan.html)
 
 # Acknowledgments
 - [mbedtls](https://github.com/ARMmbed/mbedtls)

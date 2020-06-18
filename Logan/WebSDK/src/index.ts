@@ -1,35 +1,31 @@
 import {
     LogEncryptMode,
-    LogItem,
     ReportConfig,
-    GlobalConfig
+    GlobalConfig,
+    LogConfig
 } from './interface';
-import Config from './global';
+import Config from './global-config';
 import { isValidDay } from './lib/utils';
-import { ResultMsg } from './interface';
+import { ResultMsg, ReportResult } from './interface';
 import LogManager from './log-manager';
-// @ts-ignore
 const ES6Promise = require('es6-promise');
-if (!(window as any).Promise) {
-    (window as any).Promise = ES6Promise;
+if (!window.Promise) {
+    window.Promise = ES6Promise;
 }
-var logQueueBeforeLoad: LogItem[] = [];
+let logQueueBeforeLoad: LogConfig[] = [];
 
-async function onWindowLoad() {
-    logQueueBeforeLoad.forEach(logItem => {
-        logAsync(logItem);
-    });
-    logQueueBeforeLoad = [];
-    window.removeEventListener('load', onWindowLoad);
+function logContentWrapper (content: string, logType: number): string {
+    const logOb = {
+        t: logType,
+        c: `${encodeURIComponent(content)}`,
+        d: `${Date.now()}`
+    };
+    return JSON.stringify(logOb);
 }
-window.addEventListener('load', onWindowLoad);
 
-function reportParamChecker(reportConfig: ReportConfig) {
-    if (!reportConfig.reportUrl && !Config.get('reportUrl')) {
-        throw new Error('reportUrl needs to be set before report');
-    }
-    if (reportConfig.deviceId === undefined) {
-        throw new Error('deviceId is needed');
+function reportParamChecker (reportConfig: ReportConfig): never | void {
+    if (!reportConfig) {
+        throw new Error('reportConfig needs to be an object');
     }
     const dayFormatDesc = 'is not valid, needs to be YYYY-MM-DD format';
     if (!isValidDay(reportConfig.fromDayString)) {
@@ -43,11 +39,11 @@ function reportParamChecker(reportConfig: ReportConfig) {
     }
 }
 
-function logParamChecker(logType: number, encryptMode: LogEncryptMode) {
+function logParamChecker (logType: number, encryptVersion: LogEncryptMode): never | void {
     if (typeof logType !== 'number') {
         throw new Error('logType needs to be set');
     }
-    if (encryptMode === LogEncryptMode.RSA) {
+    if (encryptVersion === LogEncryptMode.RSA) {
         if (!Config.get('publicKey')) {
             throw new Error(
                 'publicKey needs to be set before logWithEncryption'
@@ -56,68 +52,91 @@ function logParamChecker(logType: number, encryptMode: LogEncryptMode) {
     }
 }
 
-async function logIfLoaded(logItem: LogItem) {
+async function logAsync (logItem: LogConfig): Promise<void> {
+    // No need to async import if tryTimes exceeds.
+    if (LogManager.canSave()) {
+        try {
+            const saveLogModule = await import(
+                /* webpackChunkName: "save_log" */ './save-log'
+            );
+            saveLogModule.default(logItem);
+        } catch (e) {
+            LogManager.errorTrigger();
+            await (Config.get('errorHandler') as Function)(e);
+        }
+    } else {
+        await (Config.get('errorHandler') as Function)(new Error(ResultMsg.EXCEED_TRY_TIMES));
+    }
+}
+
+function logIfLoaded (logItem: LogConfig): void {
     if (
         !document.readyState ||
         (document.readyState && document.readyState === 'complete')
     ) {
-        await logAsync(logItem);
+        logAsync(logItem);
     } else {
         logQueueBeforeLoad.push(logItem);
     }
 }
 
-async function logAsync(logItem: LogItem) {
-    if (LogManager.canSave()) {
-        try {
-            let saveLogModule = await import(
-                /* webpackChunkName: "save_log" */ './save-log'
-            );
-            await saveLogModule.default(logItem);
-        } catch (e) {
-            LogManager.errorTrigger();
-            (Config.get('errorHandler') as Function)(e);
-        }
-    } else {
-        (Config.get('errorHandler') as Function)(
-            new Error(ResultMsg.EXCEED_TRY_TIMES)
-        );
+function standardLog (content: string, logType: number, encryptVersion: LogEncryptMode): never | void {
+    try {
+        logParamChecker(logType, LogEncryptMode.PLAIN);
+    } catch (e) {
+        (Config.get('errorHandler') as Function)(e);
     }
+    logIfLoaded({
+        logContent: logContentWrapper(content, logType),
+        encryptVersion
+    });
 }
+
+function onWindowLoad (): void {
+    logQueueBeforeLoad.forEach(logItem => {
+        logAsync(logItem);
+    });
+    logQueueBeforeLoad = [];
+    window.removeEventListener('load', onWindowLoad);
+}
+window.addEventListener('load', onWindowLoad);
 
 /**
  * Set global settings for this single Logan instance. Usually you only need to call this once after Logan is imported. Each time this method is called, all previous global configs will be overwritten by current settings.
  *
  * @param globalConfig Global settings
  */
-export function initConfig(globalConfig: GlobalConfig) {
+export function initConfig (globalConfig: GlobalConfig): void {
     Config.set(globalConfig);
 }
 
 /**
- * Save one log to local.
- *
+ * Save one log locally.
  * @param content Log content.
  * @param logType Log type.
  */
-export async function log(content: string, logType: number) {
-    logParamChecker(logType, LogEncryptMode.PLAIN);
-    await logIfLoaded({
-        content,
-        logType,
-        encryptVersion: LogEncryptMode.PLAIN
-    });
+export function log (content: string, logType: number): void {
+    standardLog(content, logType, LogEncryptMode.PLAIN);
 }
 
 /**
- * Save one confidential log to local. Before saving, the log content will be encrypted and it is very hard to crack after then.
- *
+ * Save one confidential log locally. Before saving, the log content will be encrypted and it is very hard to crack after then.
  * @param content Log content.
  * @param logType Log type.
  */
-export async function logWithEncryption(content: string, logType: number) {
-    logParamChecker(logType, LogEncryptMode.RSA);
-    await logIfLoaded({ content, logType, encryptVersion: LogEncryptMode.RSA });
+export function logWithEncryption (content: string, logType: number): void {
+    standardLog(content, logType, LogEncryptMode.RSA);
+}
+
+/**
+ * Save custom formatted log content locally.
+ * @param {LogConfig} logConfig
+ */
+export function customLog (logConfig: LogConfig): void {
+    logIfLoaded({
+        logContent: logConfig.logContent,
+        encryptVersion: logConfig.encryptVersion
+    });
 }
 
 /**
@@ -126,9 +145,9 @@ export async function logWithEncryption(content: string, logType: number) {
  * @param reportConfig Config for this report.
  * @returns {Promise<ReportResult>} Reject with an Error if anything goes wrong during the report process. Resolve ReportResult if the process is successful.
  */
-export async function report(reportConfig: ReportConfig) {
+export async function report (reportConfig: ReportConfig): Promise<ReportResult> {
     reportParamChecker(reportConfig);
-    let reportLogModule = await import(
+    const reportLogModule = await import(
         /* webpackChunkName: "report_log" */ './report-log'
     );
     return await reportLogModule.default(reportConfig);
@@ -139,5 +158,6 @@ export default {
     log,
     logWithEncryption,
     report,
+    customLog,
     ResultMsg
 };

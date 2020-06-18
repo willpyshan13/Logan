@@ -5,7 +5,7 @@ Web SDK for Logan, supports logging in the H5 and browser environment.
 
 ## Logan Workflow
 
-![Logan Web Workflow](https://raw.githubusercontent.com/Meituan-Dianping/Logan/master/Logan/WebSDK/img/logan_web_workflow_en.png)
+<img style="width:70%;" src="https://raw.githubusercontent.com/Meituan-Dianping/Logan/master/Logan/WebSDK/img/logan_web_workflow_en.png"/>
 
 ## Getting Started
 Install logan-web using `npm`:
@@ -77,6 +77,8 @@ This method is used to set global configs for the single Logan instance. Usually
 	
 	* errorHandler(Optional): This method will collect unhandled Promise rejections may caused by log() and logWithEncryption() method. Generally speaking, log method will not bother you with async exceptions explicitly. But if you want to know the exceptions, you can use this handler.
 
+    * succHandler(Optional): This method will be invoked if log is successfully saved locally.
+
 ```js
 import Logan from 'logan-web';
 Logan.initConfig({
@@ -87,7 +89,13 @@ Logan.initConfig({
         'MmKYGpapMqkxsnS/6Q8UZO4PQNlnsK2hSPoIDeJcHxDvo6Nelg+mRHEpD6K+1FIq\n'+
         'zvdwVPCcgK7UbZElAgMBAAE=\n'+
         '-----END PUBLIC KEY-----',
-    errorHandler: function(e) {}
+    errorHandler: function(e) {},
+    succHandler: function(logItem) {
+        var content = logItem.content;
+        var logType = logItem.logType;
+        var encrypted = logItem.encrypted;
+        console.log('Log Succ:' + content);
+    }
 });
 Logan.logWithEncryption('confidentialLogContent', 1);
 
@@ -108,13 +116,13 @@ Note: This encryption process makes saved logs very difficult to be cracked, but
 Locally saved logs are indexed and organized by log day, thus logs will be uploaded by days too. This method will resolve a map of results grouped by the day.
 
 * reportConfig: Configs related to this report operation.
-	* reportUrl(Optional): The server address that can accept logs. It is not necessary if global reportUrl is already set by initConfig() method.
-	
-	* deviceId: Unique local deviceId that represents current environment or user on this device. This id is used for later log retrieval from the server.
-	
 	* fromDayString: Logs that saved from this day (this day is not exclusive) will be uploaded. YYYY-MM-DD format.
 	
 	* toDayString: Logs that saved until this day (this day is not exclusive) will be uploaded. YYYY-MM-DD format.
+	* 
+	* reportUrl(Optional): The server address that can accept logs. It is not necessary if global reportUrl is already set by initConfig() method.
+	
+	* deviceId(Optional): Unique local deviceId that represents current environment or user on this device. This id is used for later log retrieval from the server.
 	
 	* webSource(Optional): Extra report source information. Like browser, WeChat etc.
 	
@@ -122,7 +130,12 @@ Locally saved logs are indexed and organized by log day, thus logs will be uploa
 	
 	* customInfo(Optional): Extra information of current biz, user etc.
 
-Example:
+    * incrementalReport(Optional): Delete reported logs after report if true. Default to be false.
+
+    * xhrOptsFormatter(Optional): You can set your custom xhr options optionally, each property you set in formatter will replace the default logan report option. You can refer to the second following example.
+
+
+Example1:
 
 ```js
 import Logan from 'logan-web';
@@ -146,6 +159,63 @@ console.log(reportResult);
 */
 ```
 
+Example2:
+
+```js
+import Logan from 'logan-web';
+const reportResult = await Logan.report({
+    fromDayString: '2019-11-06',
+    toDayString: '2019-11-08',
+    /**
+    * @param {Function} - logan-web will provide logItemStrings, logPageNo and logDayString for your formatter.
+    * @returns {Object} xhrOpts - Your custom xhr options.
+    * @returns {*} xhrOpts.data - The type of data is any, as long as your server can understand.
+    * @returns {boolean} [xhrOpts.withCredentials=false] - Default to be false.
+    * @returns {Object} [xhrOpts.header={
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Accept': 'application/json,text/javascript'
+            }] - You can set your own header object to override the default one.
+    * @returns {Function=} xhrOpts.responseDealer - You can deal with your server response, just to tell logan-web whether this report is succ or fail.
+    */
+    xhrOptsFormatter: function (logItemStrings, logPageNo/* logPageNo starts from 1 */, logDayString) {
+        return {
+            reportUrl: 'https://yourServerAddressToAcceptLogs',
+            data: {
+                fileDate: logDayString,
+                logArray: logItemStrings.toString(),
+                logPageNo: logPageNo
+                /* ...Other properties you want to post to the server */
+            },
+            withCredentials: false,
+            header: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Accept': 'application/json,text/javascript'
+            },
+            responseDealer: function (xhrResponseText) {
+                if (xhrResponseText === 'well done') {
+                    return {
+                        resultMsg: 'Report succ'
+                    };
+                } else {
+                    return {
+                        resultMsg: 'Report fail',
+                        desc: 'what is wrong with this report'
+                    };
+                }
+            }
+        }
+    }
+});
+console.log(reportResult);
+/* e.g.
+{ 
+	2019-11-06: {msg: "No log exists"},
+	2019-11-07: {msg: "Report succ"},
+	2019-11-08: {msg: "Report fail", desc: "what is wrong with this report"}
+}
+*/
+```
+
 ## Limits
 Although IndexedDB is well known to have large storage quota, it still has limits. Usually you can use it up to 50MB each origin without user granting permission popped. Thus Logan Web allows up to 7 log days and each day has up to 7MB log limits. Expired logs will be deleted during every log operation.
 
@@ -155,7 +225,7 @@ Each day's report many be splitted into many smaller requests, sent parallel. Ea
 ## Logan Web SDK Structure
 logan-web is based on the [idb-managed](https://github.com/sylvia1106/idb-managed) package to manage IndexedDB operations, which is also opensourced. Here is the structure map of Logan Web:
 
-![Logan Web Structure](https://raw.githubusercontent.com/Meituan-Dianping/Logan/master/Logan/WebSDK/img/logan_web_structure_en.png)
+<img style="width:50%;" src="https://raw.githubusercontent.com/Meituan-Dianping/Logan/master/Logan/WebSDK/img/logan_web_structure_en.png"/>
 
 
 ## License

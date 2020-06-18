@@ -6,7 +6,7 @@
 ## 前端日志的工作流
 很多时候，开发者本地难以复现或触达用户端的异常情况。这种时候，端上完整的日志流及上下文信息将帮助开发者更有效地还原问题现场，定位并解决这些疑难杂症。然而大体积日志流的实时上报将耗费巨大的用户及企业流量，真正能帮助开发者解决问题的却只有极少部分。因此 Logan 在实现前端日志流的存储与上报时，采用的是用户端日志本地存储结合问题反馈时触发上报的方式：
 
-![Logan Web Workflow](https://raw.githubusercontent.com/Meituan-Dianping/Logan/master/Logan/WebSDK/img/logan_web_workflow.png)
+<img style="width:70%; max-width:70%;" src="https://raw.githubusercontent.com/Meituan-Dianping/Logan/master/Logan/WebSDK/img/logan_web_workflow.png"/>
 
 ## 接入方式
 下载 npm 包
@@ -26,7 +26,7 @@ logan-web 使用了动态导入 (dynamic imports) 来分割代码，目的是实
 
 ## 简单上手
 ### 🎒 日志存储
-在脚本代码中你可以使用 log() 方法来记录日志内容。日志信息会被 Logan Web 按序保存在本地浏览器的 IndexedDB 库中。由于 IndexedDB API 都是异步执行的，因此你无需等待 log() 方法的返回，只要像你平时使用 console.log() 一样，尽管打日志即可~
+在脚本代码中你可以使用 log() 方法来记录日志内容。日志信息会被 Logan Web 按序保存在本地浏览器的 IndexedDB 库中。log 方法的调用方式是同步的，其内部会异步执行日志的本地存储，你无需等待日志的存储结果返回。如果你很关心存储过程是否发生异常，可以在 initConfig 方法中配置 errorHandler 来获取存储时异常。
 
 ```js
 import Logan from 'logan-web';
@@ -37,7 +37,7 @@ Logan.log(logContent, logType);
 ```
 
 ### 📤 日志上报
-你可以在用户在页面点击反馈或者代码捕捉异常等时机，调用 report() 方法来触发 Logan 本地日志的上报。Logan 的本地日志是按照天存储的，因此你需要通过参数告诉 Logan 你想上报哪几天的日志内容。
+你可以在用户在页面点击反馈或者代码捕捉异常等时机，调用异步 report() 方法来触发 Logan 本地日志的上报。Logan 的本地日志是按照天存储的，因此你需要通过参数告诉 Logan 你想上报哪几天的日志内容。
 
 ```js
 import Logan from 'logan-web';
@@ -71,7 +71,9 @@ console.log(reportResult);
 	
 	* dbName (可选): 你可以配置该项来自定义本地 DB 库的名字。默认为 logan\_web\_db。不同DB 库之间的数据是隔离而不受影响。
 	
-	* errorHandler (可选): 你可以配置该项来接收 log() 和 logWithEncryption() 方法可能产生的 Promise rejection. Logan 希望你能轻松地调用 log 来存储日志，而不是在每个异步 log 方法后面都得追加一个 catch。但如果你确实想知道 Logan 在存储时是否报错了，你可以配置该方法来获取异常。
+	* errorHandler (可选): 你可以配置该项来接收 log() 和 logWithEncryption() 方法可能产生的异常. Logan 的 log 及 logWithEncryption 方法在底层会执行异步存储，因此你无需等待这两个方法的返回。如果你确实想知道 Logan 在存储时是否报错了，你可以配置该方法来获取异常。
+
+	* succHandler (可选): 你可以配置该项回调，该方法会在 log() 和 logWithEncryption() 方法内异步存储日志成功后执行。
 
 ```js
 import Logan from 'logan-web';
@@ -83,7 +85,13 @@ Logan.initConfig({
         'MmKYGpapMqkxsnS/6Q8UZO4PQNlnsK2hSPoIDeJcHxDvo6Nelg+mRHEpD6K+1FIq\n'+
         'zvdwVPCcgK7UbZElAgMBAAE=\n'+
         '-----END PUBLIC KEY-----',
-    errorHandler: function(e) {}
+    errorHandler: function(e) {},
+    succHandler: function(logItem) {
+        var content = logItem.content;
+        var logType = logItem.logType;
+        var encrypted = logItem.encrypted;
+        console.log('Log Succ:' + content);
+    }
 });
 Logan.logWithEncryption('confidentialLogContent', 1);
 
@@ -106,13 +114,13 @@ Logan.logWithEncryption('confidentialLogContent', 1);
 该 report() 异步方法会从本地 DB 库中获取指定天的日志逐天进行上报。上报完成后会返回一个天为 key，上报结果为 value 的对象。
 
 * reportConfig: 本次上报的参数对象。
+	* fromDayString: 上报该天及之后的日志，YYYY-MM-DD 格式。
+  	
+	* toDayString: 上报该天及之前的日志，YYYY-MM-DD 格式.
 
 	* reportUrl (可选): 用于接收本地上报日志内容的服务器地址。如果你已通过 initConfig() 设置了同样的 reportUrl 作为全局上报地址，该项可略。
 	
-	* deviceId: 该用户端环境的唯一标识符，用于区分其他设备环境上报的日志，你需要通过该标识符在服务端检索已上报的日志信息。
-	
-	* fromDayString: 上报该天及之后的日志，YYYY-MM-DD 格式。	
-	* toDayString: 上报该天及之前的日志，YYYY-MM-DD 格式.
+	* deviceId（可选）: 该用户端环境的唯一标识符，用于区分其他设备环境上报的日志，你需要通过该标识符在服务端检索已上报的日志信息。	
 	
 	* webSource (可选): 当前上报来源，如Chrome、微信、QQ等。
 	
@@ -120,7 +128,11 @@ Logan.logWithEncryption('confidentialLogContent', 1);
 	
 	* customInfo (可选): 当前用户或业务附加信息。
 
-用法示例：
+    * incrementalReport(可选): 若设为true，则本次上报为增量上报，上报的日志将从本地删除。默认为false。 
+
+    * xhrOptsFormatter(可选): 可设置自定义的xhr配置来覆盖默认的logan上报数据以及xhr设置。你可以参考下面用法示例2。
+
+用法示例1：
 
 ```js
 import Logan from 'logan-web';
@@ -144,6 +156,62 @@ console.log(reportResult);
 */
 ```
 
+用法示例2：
+```js
+import Logan from 'logan-web';
+const reportResult = await Logan.report({
+    fromDayString: '2019-11-06',
+    toDayString: '2019-11-08',
+    /**
+    * @param {Function} - logan-web会将本次即将上报的日志信息，日志对应的页数以及上报当天日期作为入参提供给你的formatter，你可以让formatter来组织并返回期望上报的数据格式及xhr参数。
+    * @returns {Object} xhrOpts - 返回xhr配置对象
+    * @returns {*} xhrOpts.data - data的类型是任意的，只需你的服务器端能接收成功并解析即可
+    * @returns {boolean} [xhrOpts.withCredentials=false] - 可选，默认为false
+    * @returns {Object} [xhrOpts.header={
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Accept': 'application/json,text/javascript'
+            }] - 可选，你可以配置自定义的header来替代掉默认的header
+    * @returns {Function=} xhrOpts.responseDealer - 可选，你可以配置该方法来自定义处理服务端response，只需告诉logan-web本次上报被认为是成功还是失败。该结果会被logan-web收集并最终反映在report接口的reportResult中。
+    */
+    xhrOptsFormatter: function (logItemStrings, logPageNo/* logPageNo starts from 1 */, logDayString) {
+        return {
+            reportUrl: 'https://yourServerAddressToAcceptLogs',
+            data: {
+                fileDate: logDayString,
+                logArray: logItemStrings.toString(),
+                logPageNo: logPageNo
+                /* ...Other properties you want to post to the server */
+            },
+            withCredentials: false,
+            header: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Accept': 'application/json,text/javascript'
+            },
+            responseDealer: function (xhrResponseText) {
+                if (xhrResponseText === 'well done') {
+                    return {
+                        resultMsg: 'Report succ'
+                    };
+                } else {
+                    return {
+                        resultMsg: 'Report fail',
+                        desc: 'what is wrong with this report'
+                    };
+                }
+            }
+        }
+    }
+});
+console.log(reportResult);
+/* e.g.
+{ 
+	2019-11-06: {msg: "No log exists"},
+	2019-11-07: {msg: "Report succ"},
+	2019-11-08: {msg: "Report fail", desc: "what is wrong with this report"}
+}
+*/
+```
+
 ## 容量设限
 尽管 IndexedDB 的数据容量较之于其他浏览器存储空间来说是很大了，但它也是有容量限制的。IndexedDB 的容量限制是域隔离的，有些浏览器会在当前域下 IndexedDB 超过 50MB 数据用量时弹出用户授权弹框来引导用户允许更大容量的本地存储使用空间。为了避免影响用户，Logan Web 将最多只存储 7 天日志，每天日志量限制在 7M。达到该日志量后，后续的当天日志将不再能存储成功。过期日志会在下一次 log 时被清除。
 
@@ -153,7 +221,7 @@ console.log(reportResult);
 ## Logan Web SDK的整体架构
 logan-web 是在同样开源的 [idb-managed](https://github.com/sylvia1106/idb-managed) 该包基础上搭建的。该包主要负责对 IndexedDB API 的封装与调用。以下是 logan-web 的整体架构示意图：
 
-![Logan Web 架构](https://raw.githubusercontent.com/Meituan-Dianping/Logan/master/Logan/WebSDK/img/logan_web_structure.png)
+<img style="width:70%;" src="https://raw.githubusercontent.com/Meituan-Dianping/Logan/master/Logan/WebSDK/img/logan_web_structure.png"/>
 
 
 ## 软件许可协议

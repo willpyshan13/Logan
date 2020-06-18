@@ -1,49 +1,42 @@
-var noop = () => {};
+const NOOP = function (): void { /* Noop */ };
 interface XHROpts {
     url: string;
-    type: 'GET' | 'POST';
+    type: 'GET' | 'POST' | string;
+    withCredentials: boolean;
     success?: Function;
     fail?: Function;
-    withCredentials: boolean;
-    header?: any;
-    data?: Object;
+    headers?: any;
+    data?: any;
 }
-export default function(opts: XHROpts) {
-    const useXDomainRequest: boolean = window.hasOwnProperty('XDomainRequest');
-    let req = useXDomainRequest
+export default function (opts: XHROpts): XMLHttpRequest {
+    const useXDomainRequest: boolean = 'XDomainRequest' in window;
+    const req = useXDomainRequest
         ? new (window as any).XDomainRequest()
         : new XMLHttpRequest();
     req.open(opts.type || 'GET', opts.url, true);
-    req.success = opts.success || noop;
-    req.fail = opts.fail || noop;
-    req.withCredentials = !!opts.withCredentials;
+    req.success = opts.success || NOOP;
+    req.fail = opts.fail || NOOP;
+    req.withCredentials = opts.withCredentials;
     if (useXDomainRequest) {
-        req.onload = opts.success || noop;
-        req.onerror = opts.fail || noop;
-        req.onprogress = noop;
+        req.onload = opts.success || NOOP;
+        req.onerror = opts.fail || NOOP;
+        req.onprogress = NOOP;
     } else {
-        req.onreadystatechange = () => {
-            if (req.readyState == 4) {
-                let status = req.status;
+        req.onreadystatechange = function (): void {
+            if (req.readyState === 4) {
+                const status = req.status;
                 if (status >= 200) {
-                    try {
-                        let response = JSON.parse(req.responseText);
-                        opts.success && opts.success(response);
-                    } catch (e) {
-                        opts.fail && opts.fail(e);
-                    }
+                    opts.success && opts.success(req.responseText);
                 } else {
-                    opts.fail && opts.fail(req.statusText);
+                    opts.fail && opts.fail(`Request failed, status: ${status}, responseText: ${req.responseText}`);
                 }
             }
         };
     }
     if (opts.type === 'POST') {
-        if (opts.header && !useXDomainRequest) {
-            for (let key in opts.header) {
-                if (opts.header.hasOwnProperty(key)) {
-                    req.setRequestHeader(key, opts.header[key]);
-                }
+        if (opts.headers && !useXDomainRequest) {
+            for (const key in opts.headers) {
+                req.setRequestHeader(key, opts.headers[key]);
             }
         }
         req.send(opts.data);

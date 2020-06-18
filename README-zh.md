@@ -19,11 +19,11 @@ Logan 开源的是一整套日志体系，包括日志的收集存储，上报�
 
 **日志筛选**
 
-![Logan](https://mss-shon.sankuai.com/v1/mss_7d6cd84b52d543248bbb734abd392e9a/logan-open-source/logan_list_filter.gif)
+![Logan](./img/logan_list_filter.gif)
 
 **日志详情**
 
-![Logan](https://mss-shon.sankuai.com/v1/mss_7d6cd84b52d543248bbb734abd392e9a/logan-open-source/logan_detail.gif)
+![Logan](./img/logan_detail.gif)
 
 # 快速开始
 
@@ -240,21 +240,14 @@ Logan核心体系由四大模块构成：
 
 ![Logan_System](https://mss-shon.sankuai.com/v1/mss_7d6cd84b52d543248bbb734abd392e9a/logan-open-source/logan_system.png)
 
-| Module | Open Source | Processing | Planning |
-
-| :------: | :--: | :-----: | :-: |
-
-| iOS & macOS  |   √  |        |    |
-
-| Android | √ |  |  |
-
-| Web | √ |  |  |
-
-| Back End | √ |  |  |
-
-| Front End | √ |  |  |
-
-| Mini Programs |  | √ |  |
+Module | Open Source | Processing | Planning 
+:-: | :-: | :-: | :-: 
+iOS & macOS | √ | | | 
+Android | √| | | 
+Web | √ | | | 
+Back End | √| | | 
+Front End | √ | | | 
+Mini Programs | | √ | | 
 
 # 贡献
 
@@ -290,6 +283,11 @@ Logan核心体系由四大模块构成：
 
 [贡献者列表](https://github.com/Meituan-Dianping/Logan/graphs/contributors)
 
+# 联系我们
+
+添加美团小助手微信，会帮助拉入 Logan 微信技术交流群：
+MTDPtech、MTDPtech01、MTDPtech03
+
 # License
 
 Logan项目采用MIT许可协议 - 详细内容请查看[LICENSE](https://github.com/Meituan-Dianping/Logan/blob/master/LICENSE)。
@@ -300,6 +298,7 @@ Logan项目采用MIT许可协议 - 详细内容请查看[LICENSE](https://github
 
 [Logan：美团点评的开源移动端基础日志库](https://tech.meituan.com/logan_open_source.html)
 
+[美团开源 Logan Web：前端日志在 Web 端的实现](https://tech.meituan.com/2020/01/09/meituan-logan.html)
 
 # 相关知识
 

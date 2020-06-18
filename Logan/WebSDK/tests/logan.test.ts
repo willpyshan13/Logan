@@ -1,14 +1,14 @@
 /**
  * @file Tests for logan-web-opensource
  */
-var fakeDB = require('fake-indexeddb');
-var fakeDBIndex = require('fake-indexeddb/lib/FDBIndex');
-var fakeDBKeyRange = require('fake-indexeddb/lib/FDBKeyRange');
-var fakeDBDataBase = require('fake-indexeddb/lib/FDBDatabase');
-var fakeObjectStore = require('fake-indexeddb/lib/FDBObjectStore');
-var fakeDBTransaction = require('fake-indexeddb/lib/FDBTransaction');
-var fakeIDBCursor = require('fake-indexeddb/lib/FDBCursor');
-var fakeIDBRequest = require('fake-indexeddb/lib/FDBRequest');
+const fakeDB = require('fake-indexeddb');
+const fakeDBIndex = require('fake-indexeddb/lib/FDBIndex');
+const fakeDBKeyRange = require('fake-indexeddb/lib/FDBKeyRange');
+const fakeDBDataBase = require('fake-indexeddb/lib/FDBDatabase');
+const fakeObjectStore = require('fake-indexeddb/lib/FDBObjectStore');
+const fakeDBTransaction = require('fake-indexeddb/lib/FDBTransaction');
+const fakeIDBCursor = require('fake-indexeddb/lib/FDBCursor');
+const fakeIDBRequest = require('fake-indexeddb/lib/FDBRequest');
 import {
     dateFormat2Day,
     ONE_DAY_TIME_SPAN,
@@ -17,6 +17,8 @@ import {
 } from '../src/lib/utils';
 import LogManager from '../src/log-manager';
 import LoganInstance from '../src/index';
+import { ResultMsg, LogSuccHandler } from '../src/interface';
+const NodeIndex = require('../src/node-index');
 const DBName = 'testLogan';
 const ReportUrl = 'testUrl';
 const PublicK =
@@ -27,11 +29,7 @@ const PublicK =
     'zvdwVPCcgK7UbZElAgMBAAE=\n' +
     '-----END PUBLIC KEY-----';
 
-// Ready for faked IndexedDB environment
-setDBInWindow();
-import IDBM from 'idb-managed';
-import { ResultMsg } from '../src/interface';
-function setDBInWindow() {
+function setDBInWindow (): void {
     // @ts-ignore
     window.indexedDB = fakeDB;
     // @ts-ignore
@@ -49,20 +47,27 @@ function setDBInWindow() {
     // @ts-ignore
     window.IDBRequest = fakeIDBRequest;
 }
-function clearDBFromWindow() {
+// Ready for faked IndexedDB environment, before IDBM is imported.
+setDBInWindow();
+import IDBM from 'idb-managed';
+import { ReportResult } from '../build/interface';
+const errorH = (): void => { /* Noop */ };
+const succH = (): void => { /* Noop */ };
+
+function clearDBFromWindow (): void {
     // @ts-ignore
     window.indexedDB = null;
 }
-function mockXHR(status: number, responseText: string, statusText: string) {
+function mockXHR (status: number, responseText: string, statusText: string): void {
     (window as any).XMLHttpRequest = class {
         status = 200;
         responseText = '';
         statusText = '';
         readyState = 4;
-        open() {}
-        onreadystatechange() {}
-        setRequestHeader() {}
-        send() {
+        open (): void { /* Noop */ }
+        onreadystatechange (): void { /* Noop */ }
+        setRequestHeader (): void { /* Noop */ }
+        send (): void {
             setTimeout(() => {
                 this.readyState = 4;
                 this.status = status;
@@ -74,103 +79,197 @@ function mockXHR(status: number, responseText: string, statusText: string) {
     };
 }
 describe('Logan API Tests', () => {
-    beforeAll(() => {
+    afterEach(async () => {
+        await IDBM.deleteDB(DBName);
+        LogManager.resetQuota();
+    });
+    test('log', async (done) => {
+        LoganInstance.initConfig({
+            reportUrl: ReportUrl,
+            publicKey: PublicK,
+            dbName: DBName,
+            errorHandler: errorH,
+            succHandler: succH
+        });
+        LoganInstance.log('aaa', 1);
+        setTimeout(() => {
+            expect(succH).toBeCalled;
+            expect(errorH).not.toBeCalled;
+            done();
+        }, 1000);
+    });
+    test('logWithEncryption', async (done) => {
+        LoganInstance.initConfig({
+            reportUrl: ReportUrl,
+            publicKey: PublicK,
+            dbName: DBName,
+            errorHandler: errorH,
+            succHandler: succH
+        });
+        LoganInstance.logWithEncryption('aaa', 1);
+        setTimeout(() => {
+            expect(succH).toBeCalled;
+            expect(errorH).not.toBeCalled;
+            done();
+        }, 1000);
+    });
+    test('customLog', async (done) => {
+        const customLogContent = JSON.stringify({
+            content: 'aaa',
+            type: 100
+        });
+        let expectLogContent: string, expectEncryptVersion: number;
+        const succHandler: LogSuccHandler = (logConfig): void => {
+            expectLogContent = logConfig.logContent;
+            expectEncryptVersion = logConfig.encryptVersion;
+        };
+        LoganInstance.initConfig({
+            reportUrl: ReportUrl,
+            publicKey: PublicK,
+            dbName: DBName,
+            errorHandler: errorH,
+            succHandler: succHandler
+        });
+        LoganInstance.customLog({
+            logContent: customLogContent,
+            encryptVersion: 1
+        });
+        setTimeout(async () => {
+            expect(errorH).not.toBeCalled;
+            expect(expectLogContent).toBe(customLogContent);
+            expect(expectEncryptVersion).toBe(1);
+            const logDetails = await IDBM.getItemsInRangeFromDB(DBName, {
+                tableName: 'logan_detail_table'
+            });
+            expect(logDetails.length).toBe(1);
+            done();
+        }, 1000);
+    });
+    test('log with large size', async (done) => {
         LoganInstance.initConfig({
             reportUrl: ReportUrl,
             publicKey: PublicK,
             dbName: DBName
         });
-    });
-    afterEach(() => {
-        IDBM.deleteDB(DBName);
-        LogManager.resetQuota();
-    });
-    test('log', async () => {
-        expect.assertions(1);
-        const logResult = await LoganInstance.log('aaa', 1);
-        expect(logResult).toBe(undefined);
-    });
-    test('logWithEncryption', async () => {
-        expect.assertions(1);
-        const logResult = await LoganInstance.logWithEncryption('aaa', 1);
-        expect(logResult).toBe(undefined);
-    });
-    test('log with large size', async () => {
-        expect.assertions(2);
         const logNum = 40;
-        for (var i = 0; i < logNum; i++) {
-            var plaintext = '';
+        for (let i = 0; i < logNum; i++) {
+            let plaintext = '';
             // 200,000B
-            for (var j = 0; j < 25000; j++) {
+            for (let j = 0; j < 25000; j++) {
                 plaintext += Math.random()
                     .toString(36)
                     .substr(2, 8);
             }
-            var logString = 'log' + i + ':' + plaintext;
-            await LoganInstance.log(logString, 1);
-            if (i === logNum - 1) {
-                const dayResult = await IDBM.getItemsInRangeFromDB(DBName, {
-                    tableName: 'log_day_table'
-                });
-                expect(dayResult[0].reportPagesInfo.pageSizes.length).toBe(9);
-                expect(dayResult[0].totalSize).toBeLessThanOrEqual(7 * M_BYTE);
-            }
+            const logString = 'log' + i + ':' + plaintext;
+            LoganInstance.log(logString, 1);
         }
+        setTimeout(async () => {
+            expect.assertions(2);
+            const dayResult = await IDBM.getItemsInRangeFromDB(DBName, {
+                tableName: 'log_day_table'
+            });
+            expect(dayResult[0].reportPagesInfo.pageSizes.length).toBe(9);
+            expect(dayResult[0].totalSize).toBeLessThanOrEqual(7 * M_BYTE);
+            done();
+        }, 2000);
     });
-    test('log with special char', async () => {
+    test('log with special char', async (done) => {
+        LoganInstance.initConfig({
+            reportUrl: ReportUrl,
+            publicKey: PublicK,
+            dbName: DBName
+        });
         const specialString =
             String.fromCharCode(200) + String.fromCharCode(3000);
         expect(sizeOf(specialString)).toBe(5);
-        await LoganInstance.log(specialString, 1);
-        await LoganInstance.logWithEncryption(specialString, 1);
-        const logItems = await IDBM.getItemsInRangeFromDB(DBName, {
-            tableName: 'logan_detail_table'
-        });
-        expect(logItems.length).toBe(2);
+        LoganInstance.log(specialString, 1);
+        LoganInstance.logWithEncryption(specialString, 1);
+        setTimeout(async () => {
+            const logItems = await IDBM.getItemsInRangeFromDB(DBName, {
+                tableName: 'logan_detail_table'
+            });
+            expect(logItems.length).toBe(2);
+            done();
+        }, 1000);
     });
-    test('report', async () => {
+    test('report', async (done) => {
+        LoganInstance.initConfig({
+            reportUrl: ReportUrl,
+            publicKey: PublicK,
+            dbName: DBName
+        });
         expect.assertions(2);
         const today = dateFormat2Day(new Date());
         const yesterday = dateFormat2Day(
             new Date(+new Date() - ONE_DAY_TIME_SPAN)
         );
         mockXHR(200, JSON.stringify({ code: 200 }), '');
-        await LoganInstance.log('aaa', 1);
-        const reportResult = await LoganInstance.report({
-            deviceId: 'aaa',
-            fromDayString: yesterday,
-            toDayString: today
+        LoganInstance.log('aaa', 1);
+        setTimeout(async () => {
+            const reportResult = await LoganInstance.report({
+                deviceId: 'aaa',
+                fromDayString: yesterday,
+                toDayString: today
+            });
+            expect(reportResult[today].msg).toBe(
+                LoganInstance.ResultMsg.REPORT_LOG_SUCC
+            );
+            expect(reportResult[yesterday].msg).toBe(
+                LoganInstance.ResultMsg.NO_LOG
+            );
+            done();
+        }, 1000);
+    });
+    test('customReport', async (done) => {
+        LoganInstance.initConfig({
+            publicKey: PublicK,
+            dbName: DBName
         });
-        expect(reportResult[today].msg).toBe(
-            LoganInstance.ResultMsg.REPORT_LOG_SUCC
-        );
-        expect(reportResult[yesterday].msg).toBe(
-            LoganInstance.ResultMsg.NO_LOG
-        );
+        const today = dateFormat2Day(new Date());
+        mockXHR(200, JSON.stringify({ code: 200 }), '');
+        LoganInstance.log('aaa', 1);
+        setTimeout(async () => {
+            const reportResult = await LoganInstance.report({
+                fromDayString: today,
+                toDayString: today,
+                xhrOptsFormatter: () => {
+                    return {
+                        reportUrl: ReportUrl
+                    };
+                }
+            });
+            expect.assertions(1);
+            expect(reportResult[today].msg).toBe(
+                LoganInstance.ResultMsg.REPORT_LOG_SUCC
+            );
+            done();
+        }, 1000);
     });
 });
 
 describe('Logan Param Invalid Tests', () => {
     test('logType is not set', async () => {
         expect.assertions(1);
-        try {
-            // @ts-ignore
-            await LoganInstance.log('aaa');
-        } catch (e) {
-            expect(e.message).toBe('logType needs to be set');
-        }
-    });
-    test('publicKey is not set', async () => {
-        expect.assertions(1);
         LoganInstance.initConfig({
             reportUrl: ReportUrl,
-            dbName: DBName
+            dbName: DBName,
+            errorHandler: (e: Error) => {
+                expect(e.message).toBe('logType needs to be set');
+            }
         });
-        LoganInstance.logWithEncryption('aaa', 1).catch(e => {
-            expect(e.message).toBe(
-                'publicKey needs to be set before logWithEncryption'
-            );
+        // @ts-ignore
+        LoganInstance.log('aaa');
+    });
+    test('publicKey is not set', async () => {
+        LoganInstance.initConfig({
+            reportUrl: ReportUrl,
+            dbName: DBName,
+            errorHandler: (e: Error) => {
+                expect(e.message).toBe('publicKey needs to be set before logWithEncryption');
+                expect.assertions(1);
+            }
         });
+        LoganInstance.logWithEncryption('aaa', 1);
     });
     test('reportConfig is not valid', async () => {
         expect.assertions(3);
@@ -180,7 +279,7 @@ describe('Logan Param Invalid Tests', () => {
         const toDay = dateFormat2Day(new Date());
         // @ts-ignore
         LoganInstance.report({}).catch(e => {
-            expect(e.message).toBe('deviceId is needed');
+            expect(e.message).toBe('fromDayString is not valid, needs to be YYYY-MM-DD format');
         });
         // @ts-ignore
         LoganInstance.report({
@@ -211,40 +310,90 @@ describe('Logan Exception Tests', () => {
             dbName: DBName
         });
     });
-    afterEach(() => {
-        IDBM.deleteDB(DBName);
+    afterEach(async () => {
+        await IDBM.deleteDB(DBName);
         LogManager.resetQuota();
     });
-    test('report fail if xhr status is not 200', async () => {
-        expect.assertions(1);
+    test('report fail if xhr status is not 200', async (done) => {
         const today = dateFormat2Day(new Date());
         mockXHR(100, '', '');
-        await LoganInstance.log('aaa', 1);
-        const reportResult = await LoganInstance.report({
-            deviceId: 'aaa',
-            fromDayString: today,
-            toDayString: today
-        });
-        expect(reportResult[today].msg).toBe(
-            LoganInstance.ResultMsg.REPORT_LOG_FAIL
-        );
+        LoganInstance.log('aaa', 1);
+        setTimeout(async () => {
+            const reportResult = await LoganInstance.report({
+                deviceId: 'aaa',
+                fromDayString: today,
+                toDayString: today
+            });
+            expect.assertions(2);
+            expect(reportResult[today].msg).toBe(
+                LoganInstance.ResultMsg.REPORT_LOG_FAIL
+            );
+            expect(reportResult[today].desc).toBe(
+                'Request failed, status: 100, responseText: '
+            );
+            done();
+        }, 1000);
     });
-    test('report fail if server code is not 200', async () => {
-        expect.assertions(1);
+    test('report fail if server code is not 200', async (done) => {
         const today = dateFormat2Day(new Date());
         mockXHR(200, JSON.stringify({ code: 400 }), '');
-        await LoganInstance.log('aaa', 1);
-        const reportResult = await LoganInstance.report({
-            deviceId: 'aaa',
-            fromDayString: today,
-            toDayString: today
-        });
-        expect(reportResult[today].msg).toBe(
-            LoganInstance.ResultMsg.REPORT_LOG_FAIL
-        );
+        LoganInstance.log('aaa', 1);
+        setTimeout(async () => {
+            const reportResult = await LoganInstance.report({
+                deviceId: 'aaa',
+                fromDayString: today,
+                toDayString: today
+            });
+            expect.assertions(1);
+            expect(reportResult[today].msg).toBe(
+                LoganInstance.ResultMsg.REPORT_LOG_FAIL
+            );
+            done();
+        }, 1000);
     });
-    test('When IndexedDB is not supported', async () => {
-        expect.assertions(1);
+    test('report with custom response', async (done) => {
+        const today = dateFormat2Day(new Date());
+        LoganInstance.log('aaa', 1);
+        const report = async (): Promise<ReportResult> => {
+            return await LoganInstance.report({
+                deviceId: 'aaa',
+                fromDayString: today,
+                toDayString: today,
+                xhrOptsFormatter: () => {
+                    return {
+                        responseDealer: (xhrResponseText: any): any => {
+                            const responseOb = JSON.parse(xhrResponseText);
+                            if (responseOb.code === 10000) {
+                                return {
+                                    resultMsg: ResultMsg.REPORT_LOG_SUCC
+                                };
+                            } else {
+                                return {
+                                    resultMsg: ResultMsg.REPORT_LOG_FAIL,
+                                    desc: `responseOb.code:${responseOb.code}`
+                                };
+                            }
+                        }
+                    };
+                }
+            });
+        };
+        setTimeout(async () => {
+            mockXHR(200, JSON.stringify({ code: 10000 }), '');
+            const reportResult1 = await report();
+            expect(reportResult1[today].msg).toBe(
+                LoganInstance.ResultMsg.REPORT_LOG_SUCC
+            );
+            mockXHR(200, JSON.stringify({ code: 10001 }), '');
+            const reportResult2 = await report();
+            expect(reportResult2[today].msg).toBe(
+                LoganInstance.ResultMsg.REPORT_LOG_FAIL
+            );
+            expect.assertions(2);
+            done();
+        }, 1000);
+    });
+    test('When IndexedDB is not supported', async (done) => {
         clearDBFromWindow();
         LoganInstance.initConfig({
             reportUrl: ReportUrl,
@@ -254,13 +403,16 @@ describe('Logan Exception Tests', () => {
                 expect(e.message).toBe(ResultMsg.DB_NOT_SUPPORT);
             }
         });
-        await LoganInstance.log('aaa', 1);
-        setDBInWindow();
+        LoganInstance.log('aaa', 1);
+        setTimeout(() => {
+            expect.assertions(1);
+            setDBInWindow();
+            done();
+        }, 1000);
     });
-    test('When exceeds log limit', async () => {
-        expect.assertions(3);
+    test('When exceeds log limit', async (done) => {
         const LOG_TRY_TIMES = 4;
-        let errorArr: Error[] = [];
+        const errorArr: Error[] = [];
         clearDBFromWindow();
         LoganInstance.initConfig({
             logTryTimes: LOG_TRY_TIMES,
@@ -272,16 +424,38 @@ describe('Logan Exception Tests', () => {
             }
         });
         for (let i = 0; i < LOG_TRY_TIMES + 1; i++) {
-            await LoganInstance.log('aaa', 1);
+            LoganInstance.log('aaa', 1);
         }
-        setDBInWindow();
-        const logItems = await IDBM.getItemsInRangeFromDB(DBName, {
-            tableName: 'logan_detail_table'
-        });
-        expect(logItems.length).toBe(0);
-        expect(errorArr[0].message).toBe(ResultMsg.DB_NOT_SUPPORT);
-        expect(errorArr[LOG_TRY_TIMES].message).toBe(
-            ResultMsg.EXCEED_TRY_TIMES
-        );
+        setTimeout(async () => {
+            setDBInWindow();
+            const logItems = await IDBM.getItemsInRangeFromDB(DBName, {
+                tableName: 'logan_detail_table'
+            });
+            expect.assertions(4);
+            expect(logItems.length).toBe(0);
+            expect(errorArr[0].message).toBe(ResultMsg.DB_NOT_SUPPORT);
+            // 测试save-log内部对tryTime的限制判断
+            expect(errorArr[LOG_TRY_TIMES].message).toBe(
+                ResultMsg.EXCEED_TRY_TIMES
+            );
+            LoganInstance.log('bbb', 1);
+            // 测试index中logAsync对tryTime的限制判断
+            expect(errorArr[LOG_TRY_TIMES + 1].message).toBe(
+                ResultMsg.EXCEED_TRY_TIMES
+            );
+            done();
+        }, 2000);
+    });
+});
+describe('Test node-index', () => {
+    test('node-index contains all property of logan-web', () => {
+        for (const property in LoganInstance) {
+            expect(NodeIndex[property]).toBeDefined();
+            if (typeof (LoganInstance as any)[property] === 'function') {
+                expect(() => {
+                    NodeIndex[property]();
+                }).not.toThrow();
+            }
+        }
     });
 });
